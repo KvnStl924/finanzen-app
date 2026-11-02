@@ -2,7 +2,7 @@
 // Netz zuerst: ist Internet da, kommt immer die neueste Oberfläche.
 // Ohne Internet startet die zuletzt geladene Version aus dem Cache.
 // Datenanfragen (andere Adresse) werden nicht gecacht.
-const CACHE = 'finanzen-v2';
+const CACHE = 'finanzen-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
