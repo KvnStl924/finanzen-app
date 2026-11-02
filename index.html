@@ -17,7 +17,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- Adresse des Datenservice (Apps Script /exec mit JSON-Ausgabe). Leer = Vorschau ohne Daten. -->
-<script>window.FINANZEN_DATA_URL = 'https://script.google.com/macros/s/AKfycby6RM0-GxfAPN_CU4kJChztWH8vDaxExJCO6DeCKx9F7myEIxITm936vx8EwP7LxK0POA/exec?format=json';</script>
+<script>window.FINANZEN_DATA_URL = 'https://script.google.com/macros/s/AKfycby6RM0-GxfAPN_CU4kJChztWH8vDaxExJCO6DeCKx9F7myEIxITm936vx8EwP7LxK0POA/exec';</script>
 <style>
   /* ============ iOS-Systemfarben (Dark Mode) ============ */
   :root {
@@ -499,8 +499,19 @@
     };
     const fail = err => { btn.classList.remove('spin'); ptrDone(); if (state.data) toast('Aktualisieren fehlgeschlagen', true); else renderError(err); };
     if (window.FINANZEN_DATA_URL) {
-      fetch(window.FINANZEN_DATA_URL, { cache: 'no-store' })
+      // Der Zugangsschlüssel steht nicht im (öffentlichen) Code, sondern wird einmal am Gerät eingegeben.
+      let key = '';
+      try { key = localStorage.getItem('finanzen_key') || ''; } catch (e) {}
+      if (!key) {
+        key = (window.prompt('Zugangsschlüssel eingeben') || '').trim();
+        if (key) { try { localStorage.setItem('finanzen_key', key); } catch (e) {} }
+      }
+      fetch(window.FINANZEN_DATA_URL, { method: 'POST', body: JSON.stringify({ key: key }), cache: 'no-store' })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(j => {
+          if (j && j.error) { try { localStorage.removeItem('finanzen_key'); } catch (e) {} throw new Error(j.error); }
+          return j;
+        })
         .then(done, fail);
     } else if (window.google && google.script && google.script.run) {
       google.script.run.withSuccessHandler(done).withFailureHandler(fail).getData();
