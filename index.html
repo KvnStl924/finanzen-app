@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="app-build" content="2026-11-02-c">
+<meta name="app-build" content="2026-11-02-d">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -655,15 +655,15 @@
   const row = cell;
   function cellText(n, v) { return '<div class="cell"><span class="name" style="flex:0 0 auto">' + esc(n) + '</span><span class="val" style="white-space:normal;text-align:right;flex:1;min-width:0">' + esc(v) + '</span></div>'; }
   const RING_GRAD = {
-    'var(--blue)': ['#64D2FF', '#0A84FF'], 'var(--orange)': ['#FFD60A', '#FF9F0A'], 'var(--green)': ['#A6F28F', '#30D158'],
-    'var(--yellow)': ['#FFF08A', '#FFD60A'], 'var(--pink)': ['#FF8FA8', '#FF375F'], 'var(--teal)': ['#9BE8F2', '#40CBE0'],
-    'var(--purple)': ['#E6A8FF', '#BF5AF2'], 'var(--gray)': ['#C7C7CC', '#8E8E93']
+    'var(--blue)': ['#4DB8FF', '#0A84FF'], 'var(--orange)': ['#FFB340', '#FF9F0A'], 'var(--green)': ['#5BE27A', '#30D158'],
+    'var(--yellow)': ['#FFE55C', '#FFD60A'], 'var(--pink)': ['#FF6B86', '#FF375F'], 'var(--teal)': ['#6FDCEB', '#40CBE0'],
+    'var(--purple)': ['#D68AFF', '#BF5AF2'], 'var(--gray)': ['#B4B4B9', '#8E8E93']
   };
   let ringId = 0;
   function donutSvg(segs, big, small, label) {
-    const R = 76, SW = 22, cx = 100, cy = 100, tot = segs.reduce((a, s) => a + s.v, 0) || 1, id = 'rg' + (++ringId);
+    const R = 78, SW = 18, cx = 100, cy = 100, tot = segs.reduce((a, s) => a + s.v, 0) || 1, id = 'rg' + (++ringId);
     const pt = a => [cx + R * Math.cos(a), cy + R * Math.sin(a)];
-    const capA = (SW / 2) / R, gapA = segs.length > 1 ? 0.045 : 0;
+    const capA = (SW / 2) / R, gapA = segs.length > 1 ? 0.035 : 0;
     let s = '<svg viewBox="0 0 200 200" role="img" aria-label="' + esc(label) + '"><defs>';
     let a0 = -Math.PI / 2; const arcs = [];
     segs.forEach((g, i) => {
@@ -671,7 +671,7 @@
       let st = a0 + capA + gapA / 2, en = a0 + span - capA - gapA / 2;
       if (en <= st) { const mid = (st + en) / 2; st = mid - 0.001; en = mid + 0.001; }
       if (segs.length === 1) { st = a0; en = a0 + 2 * Math.PI - 0.002; }
-      const p0 = pt(st), p1 = pt(en), col = RING_GRAD[g.c];
+      const p0 = pt(st), p1 = pt(en), col = (en - st) * R > 40 ? RING_GRAD[g.c] : null;
       arcs.push({ st, en, p0, p1, g, i, id: id + '_' + i, col });
       if (col) s += '<linearGradient id="' + id + '_' + i + '" gradientUnits="userSpaceOnUse" x1="' + p0[0].toFixed(1) + '" y1="' + p0[1].toFixed(1) + '" x2="' + p1[0].toFixed(1) + '" y2="' + p1[1].toFixed(1) + '"><stop offset="0" stop-color="' + col[0] + '"/><stop offset="1" stop-color="' + col[1] + '"/></linearGradient>';
       a0 += span;
@@ -679,11 +679,11 @@
     s += '</defs><circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="var(--fill3)" stroke-width="' + SW + '"/>';
     arcs.forEach(a => {
       const large = (a.en - a.st) > Math.PI ? 1 : 0;
-      const stroke = a.col ? 'url(#' + a.id + ')' : a.g.c;
+      const stroke = a.col ? 'url(#' + a.id + ')' : (RING_GRAD[a.g.c] ? RING_GRAD[a.g.c][1] : a.g.c);
       s += '<path class="arc" pathLength="1" d="M' + a.p0[0].toFixed(2) + ' ' + a.p0[1].toFixed(2) + ' A' + R + ' ' + R + ' 0 ' + large + ' 1 ' + a.p1[0].toFixed(2) + ' ' + a.p1[1].toFixed(2) +
         '" fill="none" stroke="' + stroke + '" stroke-width="' + SW + '" stroke-linecap="round" style="animation-delay:' + (a.i * 110) + 'ms"/>';
     });
-    return s + '<text class="dnum" x="100" y="104" text-anchor="middle">' + esc(big) + '</text><text class="dsub" x="100" y="126" text-anchor="middle">' + esc(small) + '</text></svg>';
+    return s + '<text class="dnum" x="100" y="104" text-anchor="middle" style="font-size:' + (big.length > 8 ? 23 : big.length > 6 ? 26 : 30) + 'px">' + esc(big) + '</text><text class="dsub" x="100" y="126" text-anchor="middle">' + esc(small) + '</text></svg>';
   }
   function donutLegend(segs, tot) {
     tot = tot || segs.reduce((a, s) => a + s.v, 0) || 1;
