@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="app-build" content="2026-11-02-e">
+<meta name="app-build" content="2026-11-02-f">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -261,8 +261,8 @@
   .donut-wrap svg { width: 100%; max-width: 250px; height: auto; overflow: visible; filter: drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
   .donut-wrap .dnum { font-size: 30px; font-weight: 700; letter-spacing: -.035em; fill: var(--label); font-family: var(--font); }
   .donut-wrap .dsub { font-size: 13px; font-weight: 500; fill: var(--label2); font-family: var(--font); }
-  .donut-wrap .arc { stroke-dasharray: 1 1; stroke-dashoffset: 1; opacity: 0; animation: ringDraw 1s var(--ease) forwards; }
-  @keyframes ringDraw { 0% { stroke-dashoffset: 1; opacity: 0; } 8% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+  .donut-wrap .ring { transform-origin: 100px 100px; animation: ringIn .9s var(--ease) both; }
+  @keyframes ringIn { from { opacity: 0; transform: rotate(-40deg) scale(.92); } to { opacity: 1; transform: none; } }
   .donut-card { padding: 4px 16px 16px; }
   .donut-card .legend-row .name { color: var(--label); }
   .donut-card .legend-row .pct { color: var(--label2); }
@@ -655,35 +655,33 @@
   const row = cell;
   function cellText(n, v) { return '<div class="cell"><span class="name" style="flex:0 0 auto">' + esc(n) + '</span><span class="val" style="white-space:normal;text-align:right;flex:1;min-width:0">' + esc(v) + '</span></div>'; }
   const RING_GRAD = {
-    'var(--blue)': ['#4DB8FF', '#0A84FF'], 'var(--orange)': ['#FFB340', '#FF9F0A'], 'var(--green)': ['#5BE27A', '#30D158'],
-    'var(--yellow)': ['#FFE55C', '#FFD60A'], 'var(--pink)': ['#FF6B86', '#FF375F'], 'var(--teal)': ['#6FDCEB', '#40CBE0'],
-    'var(--purple)': ['#D68AFF', '#BF5AF2'], 'var(--gray)': ['#B4B4B9', '#8E8E93']
+    'var(--blue)': ['#5AC8FA', '#0A84FF'], 'var(--orange)': ['#FFCC66', '#FF9F0A'], 'var(--green)': ['#7BE495', '#30D158'],
+    'var(--yellow)': ['#FFE97A', '#FFD60A'], 'var(--pink)': ['#FF8FA3', '#FF375F'], 'var(--teal)': ['#8BE3F0', '#40CBE0'],
+    'var(--purple)': ['#DDA0FF', '#BF5AF2'], 'var(--gray)': ['#C7C7CC', '#8E8E93']
   };
-  let ringId = 0;
+  RING_GRAD['var(--s-fix)'] = RING_GRAD['var(--orange)']; RING_GRAD['var(--s-life)'] = RING_GRAD['var(--blue)']; RING_GRAD['var(--s-save)'] = RING_GRAD['var(--green)'];
+  const hexMix = (a, b, t) => {
+    const p = x => [1, 3, 5].map(i => parseInt(x.substr(i, 2), 16));
+    const A = p(a), B = p(b);
+    return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  };
   function donutSvg(segs, big, small, label) {
-    const R = 78, SW = 18, cx = 100, cy = 100, tot = segs.reduce((a, s) => a + s.v, 0) || 1, id = 'rg' + (++ringId);
-    const pt = a => [cx + R * Math.cos(a), cy + R * Math.sin(a)];
-    const capA = (SW / 2) / R, gapA = segs.length > 1 ? 0.035 : 0;
-    let s = '<svg viewBox="0 0 200 200" role="img" aria-label="' + esc(label) + '"><defs>';
-    let a0 = -Math.PI / 2; const arcs = [];
-    segs.forEach((g, i) => {
-      const span = g.v / tot * 2 * Math.PI;
-      let st = a0 + capA + gapA / 2, en = a0 + span - capA - gapA / 2;
-      if (en <= st) { const mid = (st + en) / 2; st = mid - 0.001; en = mid + 0.001; }
-      if (segs.length === 1) { st = a0; en = a0 + 2 * Math.PI - 0.002; }
-      const p0 = pt(st), p1 = pt(en), col = (en - st) * R > 40 ? RING_GRAD[g.c] : null;
-      arcs.push({ st, en, p0, p1, g, i, id: id + '_' + i, col });
-      if (col) s += '<linearGradient id="' + id + '_' + i + '" gradientUnits="userSpaceOnUse" x1="' + p0[0].toFixed(1) + '" y1="' + p0[1].toFixed(1) + '" x2="' + p1[0].toFixed(1) + '" y2="' + p1[1].toFixed(1) + '"><stop offset="0" stop-color="' + col[0] + '"/><stop offset="1" stop-color="' + col[1] + '"/></linearGradient>';
+    const R = 76, SW = 24, cx = 100, cy = 100, tot = segs.reduce((a, s) => a + s.v, 0) || 1;
+    const gap = segs.length > 1 ? 0.03 : 0;
+    let s = '<svg viewBox="0 0 200 200" role="img" aria-label="' + esc(label) + '"><circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="var(--fill3)" stroke-width="' + SW + '"/><g class="ring">';
+    let a0 = -Math.PI / 2;
+    segs.forEach(g => {
+      const span = g.v / tot * 2 * Math.PI, st = a0 + gap / 2, en = a0 + span - gap / 2, col = RING_GRAD[g.c] || ['#8E8E93', '#8E8E93'];
+      const n = Math.max(1, Math.min(40, Math.round((en - st) * R / 4)));
+      for (let k = 0; k < n; k++) {
+        const t0 = st + (en - st) * k / n, t1 = st + (en - st) * (k + 1) / n + (k < n - 1 ? 0.012 : 0);
+        const x0 = cx + R * Math.cos(t0), y0 = cy + R * Math.sin(t0), x1 = cx + R * Math.cos(t1), y1 = cy + R * Math.sin(t1);
+        s += '<path d="M' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + R + ' ' + R + ' 0 ' + (t1 - t0 > Math.PI ? 1 : 0) + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) +
+          '" fill="none" stroke="' + (n === 1 ? col[1] : hexMix(col[0], col[1], (k + 0.5) / n)) + '" stroke-width="' + SW + '"/>';
+      }
       a0 += span;
     });
-    s += '</defs><circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="var(--fill3)" stroke-width="' + SW + '"/>';
-    arcs.forEach(a => {
-      const large = (a.en - a.st) > Math.PI ? 1 : 0;
-      const stroke = a.col ? 'url(#' + a.id + ')' : (RING_GRAD[a.g.c] ? RING_GRAD[a.g.c][1] : a.g.c);
-      s += '<path class="arc" pathLength="1" d="M' + a.p0[0].toFixed(2) + ' ' + a.p0[1].toFixed(2) + ' A' + R + ' ' + R + ' 0 ' + large + ' 1 ' + a.p1[0].toFixed(2) + ' ' + a.p1[1].toFixed(2) +
-        '" fill="none" stroke="' + stroke + '" stroke-width="' + SW + '" stroke-linecap="round" style="animation-delay:' + (a.i * 110) + 'ms"/>';
-    });
-    return s + '<text class="dnum" x="100" y="104" text-anchor="middle" style="font-size:' + (big.length > 8 ? 23 : big.length > 6 ? 26 : 30) + 'px">' + esc(big) + '</text><text class="dsub" x="100" y="126" text-anchor="middle">' + esc(small) + '</text></svg>';
+    return s + '</g><text class="dnum" x="100" y="104" text-anchor="middle" style="font-size:' + (big.length > 8 ? 23 : big.length > 6 ? 26 : 30) + 'px">' + esc(big) + '</text><text class="dsub" x="100" y="126" text-anchor="middle">' + esc(small) + '</text></svg>';
   }
   function donutLegend(segs, tot) {
     tot = tot || segs.reduce((a, s) => a + s.v, 0) || 1;
