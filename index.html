@@ -256,6 +256,14 @@
   .hero .cell .name { color: rgba(255,255,255,.8); }
   .hero .cell .val { color: #fff; }
 
+  .donut-wrap { display: flex; justify-content: center; margin: 14px 0 12px; }
+  .donut-wrap svg { width: 176px; height: 176px; overflow: visible; animation: donutIn .9s var(--ease) both; }
+  .donut-wrap .dnum { font-size: 23px; font-weight: 700; letter-spacing: -.03em; fill: var(--label); font-family: var(--font); }
+  .donut-wrap .dsub { font-size: 12px; fill: var(--label2); font-family: var(--font); }
+  .donut-card { padding: 4px 16px 16px; }
+  .donut-card .legend-row .name { color: var(--label); }
+  .donut-card .legend-row .pct { color: var(--label2); }
+  @keyframes donutIn { from { opacity: 0; transform: rotate(-50deg) scale(.88); } to { opacity: 1; transform: none; } }
   .split { display: flex; gap: 3px; height: 10px; margin: 18px 0 14px; border-radius: 999px; overflow: hidden; }
   .split i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: grow .9s var(--ease) both; }
   @keyframes grow { from { transform: scaleX(0); } }
@@ -643,6 +651,49 @@
   }
   const row = cell;
   function cellText(n, v) { return '<div class="cell"><span class="name" style="flex:0 0 auto">' + esc(n) + '</span><span class="val" style="white-space:normal;text-align:right;flex:1;min-width:0">' + esc(v) + '</span></div>'; }
+  function donutSvg(segs, big, small, label) {
+    const R = 70, C = 2 * Math.PI * R, tot = segs.reduce((a, s) => a + s.v, 0) || 1; let off = 0;
+    let s = '<svg viewBox="0 0 190 190" role="img" aria-label="' + esc(label) + '"><circle cx="95" cy="95" r="' + R + '" fill="none" stroke="var(--fill3)" stroke-width="20"/>';
+    segs.forEach(g => {
+      const len = g.v / tot * C, seg = Math.max(len - (segs.length > 1 ? 2.5 : 0), 0.5);
+      s += '<circle cx="95" cy="95" r="' + R + '" fill="none" stroke="' + g.c + '" stroke-width="20" stroke-dasharray="' + seg.toFixed(2) + ' ' + (C - seg).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 95 95)"/>';
+      off += len;
+    });
+    return s + '<text class="dnum" x="95" y="99" text-anchor="middle">' + esc(big) + '</text><text class="dsub" x="95" y="119" text-anchor="middle">' + esc(small) + '</text></svg>';
+  }
+  function donutLegend(segs, tot) {
+    tot = tot || segs.reduce((a, s) => a + s.v, 0) || 1;
+    return '<div class="legend">' + segs.map(g => '<div class="legend-row"><span class="dot" style="background:' + g.c + '"></span><span class="name">' + esc(g.n) + '</span>' +
+      '<span class="val">' + esc(eur(g.v)) + '</span><span class="pct">' + Math.round(g.v / tot * 100) + ' %</span></div>').join('') + '</div>';
+  }
+  const DONUT_COL = ['var(--blue)', 'var(--orange)', 'var(--green)', 'var(--yellow)', 'var(--pink)', 'var(--teal)', 'var(--purple)'];
+  function cardKategorien(groups, gNames, sumOut) {
+    const segs = gNames.map((g, i) => ({ n: g, v: sumOf(groups[g]), c: DONUT_COL[i] || 'var(--gray)' })).filter(s => s.v > 0);
+    if (segs.length < 2) return '';
+    let list = segs;
+    if (segs.length > 6) {
+      const rest = segs.slice(5);
+      list = segs.slice(0, 5).concat([{ n: 'Sonstiges', v: rest.reduce((a, s) => a + s.v, 0), c: 'var(--gray)' }]);
+    }
+    return secHead('Nach Kategorie') + '<div class="group glass donut-card"><div class="donut-wrap">' +
+      donutSvg(list, eurShort(sumOut), 'pro Monat', 'Fixkosten nach Kategorie') + '</div>' + donutLegend(list) + '</div>';
+  }
+  function cardSparFortschritt() {
+    const d = state.data, Y = d.years[state.y]; if (!Y) return '';
+    const sp = partSum(Y, m => m.spPrivat), se = partSum(Y, m => m.spEin), sa = partSum(Y, m => m.spAus), rl = partSum(Y, m => m.ruecklage);
+    const dn = se == null && sa == null ? null : (se || 0) - (sa || 0);
+    const segs = [
+      { n: 'Privatsparkonto', v: sp || 0, c: 'var(--blue)' },
+      { n: 'Spardose netto', v: Math.max(dn || 0, 0), c: 'var(--green)' },
+      { n: 'Rücklage Fixkostenkonto', v: rl || 0, c: 'var(--yellow)' }
+    ];
+    const total = segs.reduce((a, s) => a + s.v, 0);
+    if (total <= 0) return '';
+    return secHead('Sparfortschritt', '<span class="aside">' + Y.year + '</span>') + '<div class="group glass donut-card"><div class="donut-wrap">' +
+      donutSvg(segs.filter(s => s.v > 0), eurShort(total), 'gespart ' + Y.year, 'Gespart gesamt, aufgeteilt nach Konto') + '</div>' +
+      donutLegend(segs.filter(s => s.v > 0), total) + '</div>';
+  }
+  function eurShort(n) { return has(n) ? n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '–'; }
   function secHead(title, aside) { return '<div class="sec-h"><h2>' + esc(title) + '</h2>' + (aside || '') + '</div>'; }
 
   /* ---------- Übersicht ---------- */
@@ -682,8 +733,7 @@
       h += '<section class="hero glass"><div class="eyebrow"><span class="ms">account_balance_wallet</span>Zum Leben übrig</div>' +
         '<div class="big">' + eurBig(life) + '</div>' +
         '<div class="sub">von ' + esc(eur(inc)) + ' Einkommen, nach Dauerauftrag' + (save ? ' und Sparen' : '') + '</div>' +
-        '<div class="split" role="img" aria-label="Aufteilung des Einkommens">' +
-        segs.filter(s => s.v > 0).map((s, k) => '<i style="flex:' + s.v + ';background:' + s.c + ';animation-delay:' + (k * 80) + 'ms"></i>').join('') + '</div>' +
+        '<div class="donut-wrap">' + donutSvg(segs.filter(s => s.v > 0), Math.round(Math.max(life, 0) / tot * 100) + ' %', 'zum Leben', 'Aufteilung des Einkommens') + '</div>' +
         '<div class="legend">' + segs.filter(s => s.v > 0 || s.n !== 'Sparen').map(s =>
           '<div class="legend-row"><span class="dot" style="background:' + s.c + '"></span><span class="name">' + esc(s.n) + '</span>' +
           '<span class="val">' + esc(eur(s.v)) + '</span><span class="pct">' + Math.round(s.v / tot * 100) + ' %</span></div>').join('') +
@@ -708,6 +758,7 @@
       '<div class="cell total"><span class="op">=</span><span class="name">Dauerauftrag</span><span class="val">' + esc(eur(mo.ueberweisung)) + '</span></div></div>';
 
     h += cardTermine();
+    h += cardSparFortschritt();
     h += cardPrivat();
     h += cardSpardose();
     h += cardSparplan(mo);
@@ -873,6 +924,7 @@
     const groups = {};
     out.forEach(x => { (groups[x.kategorie] = groups[x.kategorie] || []).push(x); });
     const gNames = Object.keys(groups).sort((a, b) => sumOf(groups[b]) - sumOf(groups[a]));
+    h += cardKategorien(groups, gNames, sumOut);
     const chips = ['Alle'].concat(gNames).concat(inc.length ? ['Eingänge'] : []);
     if (chips.indexOf(state.filter) < 0) state.filter = 'Alle';
     h += '<div class="chips" style="margin-top:16px">' + chips.map(c => '<button class="fchip glass press' + (c === state.filter ? ' on' : '') + '" data-action="filter" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>';
