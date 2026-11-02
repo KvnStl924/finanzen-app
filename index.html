@@ -554,12 +554,21 @@
   function load(isRefresh) {
     const btn = $('#btnRefresh');
     btn.classList.add('spin');
+    // Zuletzt geladene Werte sofort zeigen; neue Werte ersetzen sie, sobald sie da sind.
+    let hadCache = false;
+    if (!state.data && window.FINANZEN_DATA_URL) {
+      try {
+        const c = localStorage.getItem('finanzen_cache');
+        if (c) { state.data = JSON.parse(c); applyBrutto(); applyParts(); applySpar(); initPosition(true); render(); hadCache = true; }
+      } catch (e) { state.data = null; hadCache = false; }
+    }
     if (!state.data) renderSkeleton();
     const done = json => {
       btn.classList.remove('spin'); ptrDone();
       try {
+        if (window.FINANZEN_DATA_URL) { try { localStorage.setItem('finanzen_cache', typeof json === 'string' ? json : JSON.stringify(json)); } catch (e) {} }
         state.data = typeof json === 'string' ? JSON.parse(json) : json; applyBrutto(); applyParts(); applySpar();
-        initPosition(!isRefresh);
+        initPosition(!isRefresh && !hadCache);
         render();
         if (isRefresh) toast('Aktualisiert');
       } catch (e) { renderError(e); }
