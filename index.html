@@ -528,6 +528,7 @@
     return cell('Privatsparkonto', mo.spPrivat) + cell('Spardose: Einlagen', mo.spEin) + cell('Spardose: Entnahmen', mo.spAus) +
       cell('Spardose netto', dn) + cell('Rücklage Fixkostenkonto', mo.ruecklage);
   }
+  function hinweisOf(m) { return String(m.hinweis || '').replace(/^Damals berechnet mit:.*?\(\u22122,50\)\.?\s*/, '').trim(); }
   function stundenOf(mo) { return has(mo.stunden) || has(mo.nachb) ? (mo.stunden || 0) + (mo.nachb || 0) : null; }
   function partSum(Y, fn) { let s = 0, any = false; Y.months.forEach(m => { const v = fn(m); if (has(v)) { s += v; any = true; } }); return any ? s : null; }
   function partCells(Y) {
@@ -816,7 +817,7 @@
         h += '<div class="inner">' + cell('Brutto', m.brutto) + partRows(m) + cell('Netto gesamt', m.einnahmen) + cell('Zum Leben', m.leben, 'total') + cell('davon Hauptjob', m.hauptjob) + cell('davon Nebenjob', m.nebenjob) +
           cell('Fixkosten (Ausgaben)', m.ausgaben) + cell('Miete & Beteiligungen', m.eingaenge) + cell('Dauerauftrag', m.ueberweisung) +
           partSpar(m) + '</div>' +
-          (m.hinweis ? '<div class="note"><span class="ms">info</span><div>' + esc(m.hinweis) + '</div></div>' : '') +
+          (hinweisOf(m) ? '<div class="note"><span class="ms">info</span><div>' + esc(hinweisOf(m)) + '</div></div>' : '') +
           '<div class="actions"><button class="btn-plain" data-action="gomonth" data-i="' + i + '">In Übersicht öffnen<span class="ms">chevron_right</span></button></div>';
       }
       h += '</div></div></div>';
