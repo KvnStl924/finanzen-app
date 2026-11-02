@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Finanzen">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<!-- Adresse des Datenservice (Apps Script /exec mit JSON-Ausgabe). Leer = Vorschau ohne Daten. -->
+<!-- Adresse des Datenservice (Apps Script /exec). Der Zugangsschlüssel wird am Gerät eingegeben, nicht hier gespeichert. -->
 <script>window.FINANZEN_DATA_URL = 'https://script.google.com/macros/s/AKfycby6RM0-GxfAPN_CU4kJChztWH8vDaxExJCO6DeCKx9F7myEIxITm936vx8EwP7LxK0POA/exec';</script>
 <style>
   /* ============ iOS-Systemfarben (Dark Mode) ============ */
@@ -311,7 +311,7 @@
   .chart-cap .m { font-size: 13px; color: var(--label2); }
   .chart-cap .v { font-size: 34px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .chart-cap .r { text-align: right; }
-  .chart-cap .r b { display: block; font-size: 17px; font-weight: 600; color: var(--label); font-variant-numeric: tabular-nums; }
+  .chart-cap .r b { display: block; font-size: 17px; font-weight: 600; color: var(--label); font-variant-numeric: tabular-nums; } .tri { display: grid; grid-template-columns: auto 1fr 1fr; gap: 9px 14px; align-items: baseline; padding: 16px 16px 12px; font-variant-numeric: tabular-nums; } .tri .hd { font-size: 13px; color: var(--label2); text-align: right; } .tri .rl { font-size: 15px; color: var(--label2); } .tri .rv { font-size: 17px; font-weight: 600; text-align: right; color: var(--label); } .tri .rv.tot { font-size: 20px; font-weight: 700; }
   .chart-wrap { padding: 4px 12px 12px; }
   svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
   svg.chart text { font-family: var(--font); fill: var(--label2); font-size: 11px; font-weight: 500; }
@@ -484,6 +484,71 @@
   const state = { data: null, tab: 'home', y: 0, m: 0, chartYear: 0, chartSel: null, openMonth: null, filter: 'Alle' };
 
   /* ================= Daten laden ================= */
+  function steuerBrutto(year) {
+    const d = state.data; if (!d || !d.years) return null;
+    const Y = d.years.find(y => y.year === year);
+    if (!Y) return null;
+    let s = 0, any = false;
+    Y.months.forEach(m => { if (has(m.brutto)) { s += m.brutto; any = true; } });
+    return any ? s : null;
+  }
+  function applyBrutto() {
+    const d = state.data; if (!d || !d.years) return;
+    (d.termine || []).filter(t => t.konto === 'BRUTTO').forEach(t => {
+      const m = String(t.datum).match(/^([0-9]{4})-([0-9]{2})/); if (!m) return;
+      const Y = d.years.find(y => y.year === Number(m[1])); if (!Y) return;
+      const mo = Y.months[Number(m[2]) - 1]; if (mo && has(t.betrag)) mo.brutto = t.betrag;
+    });
+  }
+  const PART_KONTO = ['STUNDEN', 'BONUS', 'AUSHILFE', 'NACHBERECHNUNG', 'KANTINE'];
+  function applyParts() {
+    const d = state.data; if (!d || !d.years) return;
+    (d.termine || []).filter(t => PART_KONTO.includes(t.konto)).forEach(t => {
+      const m = String(t.datum).match(/^([0-9]{4})-([0-9]{2})/); if (!m || !has(t.betrag)) return;
+      const Y = d.years.find(y => y.year === Number(m[1])); if (!Y) return;
+      const mo = Y.months[Number(m[2]) - 1]; if (!mo) return;
+      const key = { STUNDEN: 'stunden', BONUS: 'bonus', AUSHILFE: 'aushilfe', NACHBERECHNUNG: 'nachb', KANTINE: 'kantine' }[t.konto];
+      mo[key] = (mo[key] || 0) + t.betrag;
+    });
+  }
+  function applySpar() {
+    const d = state.data; if (!d || !d.years) return;
+    (d.termine || []).filter(t => ['SPARKONTO', 'SPARDOSE_EIN', 'SPARDOSE_AUS', 'RUECKLAGE'].includes(t.konto)).forEach(t => {
+      const m = String(t.datum).match(/^([0-9]{4})-([0-9]{2})/); if (!m || !has(t.betrag)) return;
+      const Y = d.years.find(y => y.year === Number(m[1])); if (!Y) return;
+      const mo = Y.months[Number(m[2]) - 1]; if (!mo) return;
+      const key = { SPARKONTO: 'spPrivat', SPARDOSE_EIN: 'spEin', SPARDOSE_AUS: 'spAus', RUECKLAGE: 'ruecklage' }[t.konto];
+      mo[key] = (mo[key] || 0) + t.betrag;
+    });
+  }
+  function partSpar(mo) {
+    const dn = has(mo.spEin) || has(mo.spAus) ? (mo.spEin || 0) - (mo.spAus || 0) : null;
+    return cell('Privatsparkonto', mo.spPrivat) + cell('Spardose: Einlagen', mo.spEin) + cell('Spardose: Entnahmen', mo.spAus) +
+      cell('Spardose netto', dn) + cell('Rücklage Fixkostenkonto', mo.ruecklage);
+  }
+  function stundenOf(mo) { return has(mo.stunden) || has(mo.nachb) ? (mo.stunden || 0) + (mo.nachb || 0) : null; }
+  function partSum(Y, fn) { let s = 0, any = false; Y.months.forEach(m => { const v = fn(m); if (has(v)) { s += v; any = true; } }); return any ? s : null; }
+  function partCells(Y) {
+    const st = partSum(Y, stundenOf), bo = partSum(Y, m => m.bonus), au = partSum(Y, m => m.aushilfe), ka = partSum(Y, m => m.kantine);
+    const bn = Y.months.filter(m => has(m.bonus)).length;
+    let h = cell('Stundenlohn (inkl. Nachberechnung)', st) + cell('Bonus (Jahr)', bo);
+    if (bn) h += cell('Ø Bonus pro Monat (' + bn + ' Monate)', bo / bn);
+    if (au != null) h += cell('Aushilfe (Jahr)', au);
+    if (ka != null) h += cell('Kantine (vom Netto, Jahr)', ka);
+    const sp = partSum(Y, m => m.spPrivat), se = partSum(Y, m => m.spEin), sa = partSum(Y, m => m.spAus), rl = partSum(Y, m => m.ruecklage);
+    const dn = se == null && sa == null ? null : (se || 0) - (sa || 0);
+    h += cell('Privatsparkonto', sp) + cell('Spardose netto (Einlagen − Entnahmen)', dn) + (rl == null ? cellText('Rücklage Fixkostenkonto', 'pausiert') : cell('Rücklage Fixkostenkonto', rl));
+    h += cell('Gespart gesamt', (sp || 0) + (dn || 0) + (rl || 0));
+    return h;
+  }
+  function partRows(mo) {
+    let h = cell('Stundenlohn', mo.stunden);
+    if (has(mo.nachb)) h += cell('Nachberechnung (Stundenlohn)', mo.nachb);
+    h += cell('Bonus', mo.bonus);
+    if (has(mo.aushilfe)) h += cell('Aushilfe', mo.aushilfe);
+    if (has(mo.kantine)) h += cell('Kantine (vom Netto)', mo.kantine);
+    return h;
+  }
   function load(isRefresh) {
     const btn = $('#btnRefresh');
     btn.classList.add('spin');
@@ -491,7 +556,7 @@
     const done = json => {
       btn.classList.remove('spin'); ptrDone();
       try {
-        state.data = typeof json === 'string' ? JSON.parse(json) : json;
+        state.data = typeof json === 'string' ? JSON.parse(json) : json; applyBrutto(); applyParts(); applySpar();
         initPosition(!isRefresh);
         render();
         if (isRefresh) toast('Aktualisiert');
@@ -528,7 +593,7 @@
     if (first) {
       let yi = d.years.findIndex(y => y.year === t.getFullYear());
       if (yi < 0) yi = d.years.length - 1;
-      state.y = yi; state.m = t.getMonth(); state.chartYear = yi;
+      state.y = yi; state.m = t.getMonth(); state.chartYear = yi; lastPaidMonth();
     }
     state.y = Math.min(state.y, d.years.length - 1);
     state.chartYear = Math.min(state.chartYear, d.years.length - 1);
@@ -542,7 +607,7 @@
     $('#title').textContent = TITLES[state.tab];
     $('#smallTitle').textContent = TITLES[state.tab];
     const fn = { home: viewHome, monate: viewMonate, fix: viewFix, haus: viewHaus }[state.tab];
-    $('#main').innerHTML = '<div class="view' + (anim ? ' ' + anim : '') + '">' + fn() + footer() + '</div>';
+    const chipX = (document.querySelector('.chips') || {}).scrollLeft || 0; $('#main').innerHTML = '<div class="view' + (anim ? ' ' + anim : '') + '">' + fn() + footer() + '</div>'; const chipNow = document.querySelector('.chips'); if (chipNow) chipNow.scrollLeft = chipX;
     placeThumbs();
     refreshGlass();
   }
@@ -565,12 +630,18 @@
     return '<div class="cell' + (cls ? ' ' + cls : '') + '"><span class="name">' + esc(name) + '</span><span class="val">' + (has(v) ? esc(eur(v)) : '–') + '</span></div>';
   }
   const row = cell;
-  function cellText(n, v) { return '<div class="cell"><span class="name">' + esc(n) + '</span><span class="val" style="white-space:normal;text-align:right">' + esc(v) + '</span></div>'; }
+  function cellText(n, v) { return '<div class="cell"><span class="name" style="flex:0 0 auto">' + esc(n) + '</span><span class="val" style="white-space:normal;text-align:right;flex:1;min-width:0">' + esc(v) + '</span></div>'; }
   function secHead(title, aside) { return '<div class="sec-h"><h2>' + esc(title) + '</h2>' + (aside || '') + '</div>'; }
 
   /* ---------- Übersicht ---------- */
   function curMonth() { const y = state.data.years[state.y]; return { year: y.year, mo: y.months[state.m] }; }
   function monthHasIncome(mo) { return has(mo.hauptjob) || has(mo.nebenjob); }
+  function lastPaidMonth() {
+    const ys = state.data.years;
+    for (let y = ys.length - 1; y >= 0; y--) for (let m = 11; m >= 0; m--) {
+      if (monthHasIncome(ys[y].months[m])) { state.y = y; state.m = m; state.chartYear = y; return; }
+    }
+  }
 
   function viewHome() {
     const d = state.data;
@@ -632,7 +703,7 @@
   }
 
   function upcoming() {
-    const d = state.data; return (d.termine || []).filter(t => t.konto !== 'SPARDOSE' && daysBetween(d.today, t.datum) >= 0);
+    const d = state.data; return (d.termine || []).filter(t => t.konto !== 'SPARDOSE' && t.konto !== 'SPARPLAN' && t.konto !== 'BRUTTO' && !PART_KONTO.includes(t.konto) && daysBetween(d.today, t.datum) >= 0);
   }
 
   function termItem(t, i) {
@@ -708,17 +779,15 @@
     let sel = state.chartSel;
     if (sel == null || !monthHasIncome(Y.months[sel])) sel = filled.length ? filled[filled.length - 1].i : null;
     h += '<div class="group glass">' +
-      '<div class="chart-cap"><div><div class="m">Zum Leben · ' + (sel != null ? esc(MONTHS[sel]) + ' ' + Y.year : 'noch keine Daten') + '</div>' +
-      '<div class="v">' + (sel != null ? esc(eur(Y.months[sel].leben)) : '–') + '</div></div>' +
-      (sel != null ? '<div class="r"><div class="m">Netto</div><b>' + esc(eur(Y.months[sel].einnahmen)) + '</b></div>' : '') + '</div>' +
+      (function () { const mo = sel != null ? Y.months[sel] : null; const f = v => has(v) ? esc(eur(v)) : '–'; const yr = k => filled.length ? f(sum(k)) : '–'; const sb = steuerBrutto(Y.year); const yb = sb == null ? '–' : f(sb); const st = partSum(Y, stundenOf); const bo = partSum(Y, m => m.bonus); const au = partSum(Y, m => m.aushilfe); const rw = (n, a, b, tot) => '<span class="rl">' + n + '</span><span class="rv' + (tot ? ' tot' : '') + '">' + a + '</span><span class="rv' + (tot ? ' tot' : '') + '">' + b + '</span>'; return '<div class="tri"><span></span><span class="hd">' + (sel != null ? esc(MONTHS[sel]) : 'Monat') + '</span><span class="hd">' + esc(String(Y.year)) + ' bisher</span>' + rw('Brutto', mo ? f(mo.brutto) : '–', yb) + rw('Stundenlohn', mo ? f(stundenOf(mo)) : '–', st == null ? '–' : f(st)) + rw('Bonus', mo ? f(mo.bonus) : '–', bo == null ? '–' : f(bo)) + (au != null ? rw('Aushilfe', mo ? f(mo.aushilfe) : '–', f(au)) : '') + rw('Netto', mo ? f(mo.einnahmen) : '–', yr('einnahmen')) + rw('Zum Leben', mo ? f(mo.leben) : '–', yr('leben'), true) + '</div>'; })() +
       '<div class="chart-wrap">' + chartSvg(Y, sel) + '</div></div>';
 
     // Summen
     if (filled.length) {
       const range = MONTHS_SHORT[filled[0].i] + (filled.length > 1 ? ' bis ' + MONTHS_SHORT[filled[filled.length - 1].i] : '');
-      h += secHead(Y.year + ' bisher', '<span class="aside">' + esc(range) + '</span>') + '<div class="group glass">' +
-        (filled.some(x => has(x.m.brutto)) ? cell('Brutto', sum('brutto')) : '') + cell('Netto', sum('einnahmen')) + cell('Dauerauftrag Fixkosten', sum('ueberweisung')) + cell('Gespart', sum('sparen')) +
-        cell('Zum Leben', sum('leben'), 'total') + cell('Ø Zum Leben pro Monat', sum('leben') / filled.length) + '</div>';
+      h += secHead(Y.year + (Y.months[11] && monthHasIncome(Y.months[11]) ? ' Jahres-Recap' : ' bisher'), '<span class="aside">' + esc(range) + '</span>') + '<div class="group glass">' +
+        (steuerBrutto(Y.year) != null ? cell('Brutto', steuerBrutto(Y.year)) : '') + cell('Netto', sum('einnahmen')) + cell('Dauerauftrag Fixkosten', sum('ueberweisung')) +  '' +
+        cell('Zum Leben', sum('leben'), 'total') + cell('Ø Zum Leben pro Monat', sum('leben') / filled.length) + partCells(Y) + '</div>';
     }
 
     // Monatsliste
@@ -733,9 +802,9 @@
         '<span class="ms chev">chevron_right</span></button>';
       h += '<div class="disclose"><div>';
       if (open) {
-        h += '<div class="inner">' + cell('Brutto', m.brutto) + cell('Netto gesamt', m.einnahmen) + cell('Zum Leben', m.leben, 'total') + cell('davon Hauptjob', m.hauptjob) + cell('davon Nebenjob', m.nebenjob) +
+        h += '<div class="inner">' + cell('Brutto', m.brutto) + partRows(m) + cell('Netto gesamt', m.einnahmen) + cell('Zum Leben', m.leben, 'total') + cell('davon Hauptjob', m.hauptjob) + cell('davon Nebenjob', m.nebenjob) +
           cell('Fixkosten (Ausgaben)', m.ausgaben) + cell('Miete & Beteiligungen', m.eingaenge) + cell('Dauerauftrag', m.ueberweisung) +
-          cell('Sparen', m.sparen || 0) + (m.korrektur ? cell('Korrektur', m.korrektur) : '') + '</div>' +
+          partSpar(m) + (m.korrektur ? cell('Korrektur', m.korrektur) : '') + '</div>' +
           (m.hinweis ? '<div class="note"><span class="ms">info</span><div>' + esc(m.hinweis) + '</div></div>' : '') +
           '<div class="actions"><button class="btn-plain" data-action="gomonth" data-i="' + i + '">In Übersicht öffnen<span class="ms">chevron_right</span></button></div>';
       }
@@ -788,6 +857,7 @@
       '<div class="cell"><span class="name" style="color:#fff;font-weight:600">= Dauerauftrag nötig</span><span class="val" style="font-weight:700;font-size:19px">' + esc(eur(S.ueberweisung)) + '</span></div>' +
       '</div></section>';
 
+    h += cardSpar();
     const groups = {};
     out.forEach(x => { (groups[x.kategorie] = groups[x.kategorie] || []).push(x); });
     const gNames = Object.keys(groups).sort((a, b) => sumOf(groups[b]) - sumOf(groups[a]));
@@ -811,6 +881,36 @@
     return h;
   }
   const sumOf = l => l.reduce((a, x) => a + (x.betrag || 0), 0);
+function sparRows() {
+  const d = state.data;
+  const plan = (d.termine || []).filter(t => t.konto === 'SPARPLAN');
+  return (d.fixkosten || []).filter(x => x.aktiv && x.typ === 'Ausgabe').map(x => {
+    const p = plan.find(t => t.was === x.name);
+    const parts = p ? String(p.hinweis || '').split(' – ') : [];
+    const cur = x.betrag || 0;
+    const target = p && has(p.betrag) ? p.betrag : cur;
+    return { x, act: p ? (parts[0] || 'Prüfen') : 'Behalten', note: parts.slice(1).join(' – '), cur, target, save: Math.max(0, cur - target) };
+  });
+}
+function cardSpar() {
+  const rows = sparRows(); const cur = rows.reduce((a, r) => a + r.cur, 0); const save = rows.reduce((a, r) => a + r.save, 0);
+  return secHead('Sparpotenzial ab Januar 2027') + '<div class="group glass">' +
+    '<div class="kpi-cell"><div class="k">' + esc(eur(save)) + '</div><div class="l">weniger pro Monat · ' + esc(eur(save * 12)) + ' im Jahr</div></div>' +
+    cell('Ausgaben heute pro Monat', cur) + cell('Ausgaben ab 2027 pro Monat', cur - save, 'total') + '</div>' +
+    '<div class="actions"><button class="btn-plain" data-action="spar">Alle Posten und Vorschläge<span class="ms">chevron_right</span></button></div>';
+}
+function sheetSpar() {
+  const rows = sparRows(); const cur = rows.reduce((a, r) => a + r.cur, 0); const save = rows.reduce((a, r) => a + r.save, 0);
+  let h = '<h3>Sparpotenzial ab Januar 2027</h3><div class="amount">' + esc(eur(save)) + '<small> weniger pro Monat</small></div>' +
+    '<div class="meta" style="margin-bottom:14px">' + esc(eur(save * 12)) + ' im Jahr · heute ' + esc(eur(cur)) + ' pro Monat</div>';
+  [...new Set(['Fällt weg', 'Kündigen', 'Wechseln', 'Prüfen', 'Behalten'].concat(rows.map(r => r.act)))].forEach(a => {
+    const list = rows.filter(r => r.act === a); if (!list.length) return;
+    const s = list.reduce((x, r) => x + r.save, 0);
+    h += secHead(a, '<span class="aside">' + esc(s > 0 ? '− ' + eur(s) : '') + '</span>') + '<div class="group glass">' +
+      list.map(r => '<div class="cell"><span class="two"><span class="t wrap" style="display:-webkit-box">' + esc(r.x.name) + '</span><span class="s" style="display:block">' + esc(r.note || '') + '</span></span><span class="val">' + esc(eur(r.cur)) + (r.save > 0 ? '<span class="s" style="display:block">→ ' + esc(eur(r.target)) + '</span>' : '') + '</span></div>').join('') + '</div>';
+  });
+  return h + '<div class="note"><span class="ms">info</span><div>Ziele bei „Wechseln“ sind Schätzungen aus deiner Simulation, keine Angebote. Vor dem Wechsel das echte Angebot prüfen. Die iPhone-Finanzierung ist nicht eingerechnet, weil das Ende fehlt.</div></div>';
+}
 
   function fixItem(x, i) {
     const inc = x.typ === 'Eingang';
@@ -1016,6 +1116,7 @@
       case 'gomonth': state.y = state.chartYear; state.m = i; state.tab = 'home'; render(); window.scrollTo(0, 0); break;
       case 'filter': state.filter = el.dataset.v; haptic(4); render('static'); break;
       case 'fix': openSheet(sheetFix(d.fixkosten[i])); break;
+      case 'spar': openSheet(sheetSpar()); break;
       case 'termin': openSheet(sheetTermin(d.termine[i])); break;
       case 'alltermine': openSheet(sheetAllTermine()); break;
     }
@@ -1060,7 +1161,7 @@
       ptr.querySelector('.ms').style.animation = 'spin .9s linear infinite'; haptic(10); load(true);
     } else if (pulling) { ptr.style.transition = 'height .3s var(--ease)'; ptr.style.height = '0'; }
     pulling = false;
-    if (state.tab === 'home' && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { const order = ['home','monate','fix','haus']; const j = order.indexOf(state.tab) + (dx < 0 ? 1 : -1); if (j >= 0 && j < order.length) { state.tab = order[j]; haptic(8); render(dx < 0 ? 'from-r' : 'from-l'); window.scrollTo(0, 0); } }
   }, { passive: true });
   function ptrDone() {
     ptr.style.transition = 'height .35s var(--ease)'; ptr.style.height = '0';
