@@ -815,7 +815,7 @@
       if (open) {
         h += '<div class="inner">' + cell('Brutto', m.brutto) + partRows(m) + cell('Netto gesamt', m.einnahmen) + cell('Zum Leben', m.leben, 'total') + cell('davon Hauptjob', m.hauptjob) + cell('davon Nebenjob', m.nebenjob) +
           cell('Fixkosten (Ausgaben)', m.ausgaben) + cell('Miete & Beteiligungen', m.eingaenge) + cell('Dauerauftrag', m.ueberweisung) +
-          partSpar(m) + (m.korrektur ? cell('Korrektur', m.korrektur) : '') + '</div>' +
+          partSpar(m) + '</div>' +
           (m.hinweis ? '<div class="note"><span class="ms">info</span><div>' + esc(m.hinweis) + '</div></div>' : '') +
           '<div class="actions"><button class="btn-plain" data-action="gomonth" data-i="' + i + '">In Übersicht öffnen<span class="ms">chevron_right</span></button></div>';
       }
