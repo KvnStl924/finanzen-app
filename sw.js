@@ -2,7 +2,7 @@
 // Netz zuerst: ist Internet da, kommt immer die neueste Oberfläche.
 // Ohne Internet startet die zuletzt geladene Version aus dem Cache.
 // Datenanfragen (andere Adresse) werden nicht gecacht.
-const CACHE = 'finanzen-v5';
+const CACHE = 'finanzen-v6';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (event) => {
       const cache = await caches.open(CACHE);
       try {
         const res = await fetch(req, { cache: 'no-cache' });
-        if (res.ok) cache.put(req, res.clone());
+        if (res.ok && !url.search.includes('chk=')) cache.put(req, res.clone());
         return res;
       } catch (e) {
         const hit = await cache.match(req, { ignoreSearch: true });

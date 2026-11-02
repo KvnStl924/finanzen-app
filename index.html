@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="app-build" content="2026-11-02-d">
+<meta name="app-build" content="2026-11-02-e">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1219,7 +1219,7 @@ function sheetSpar() {
   $('#scrim').addEventListener('click', closeSheet);
   // Aktualisieren: erst prüfen, ob es eine neue Oberfläche gibt (dann neu laden), sonst nur die Werte holen.
   function checkUpdate() {
-    return fetch('index.html?chk', { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
+    return fetch('index.html?chk=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
       const m = /<meta name="app-build" content="([^"]+)"/.exec(t), cur = document.querySelector('meta[name="app-build"]');
       if (!m || !cur || m[1] === cur.content) return false;
       return (window.caches ? caches.keys().then(k => Promise.all(k.map(x => caches.delete(x)))) : Promise.resolve()).then(() => { location.reload(); return true; });
